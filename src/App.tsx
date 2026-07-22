@@ -305,9 +305,14 @@ function Dashboard({ session, profile, onProfileSaved }: { session: Session; pro
   const refresh = useCallback(async () => {
     setNotice('');
     try {
-      const [overview, clientRows] = await Promise.all([getProfessionalOverview(session.user.id), getProfessionalClients()]);
+      const overview = await getProfessionalOverview(session.user.id);
       setInvites(overview.invites);
-      setClients(clientRows);
+      try {
+        setClients(await getProfessionalClients());
+      } catch (error) {
+        setClients([]);
+        setNotice(friendlyError(error));
+      }
     } catch (error) {
       setNotice(friendlyError(error));
     } finally {
