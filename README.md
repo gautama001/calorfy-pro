@@ -18,14 +18,17 @@ mismo proyecto de Supabase, pero cuenta con su propio build y despliegue.
 
 ## Despliegue en Hostinger
 
-- Repositorio: `gautama001/calorfy` mientras se prepara el repositorio separado.
+- Repositorio recomendado: `gautama001/calorfy-pro`.
 - Rama: `main`.
-- Directorio raíz: `pro-web`.
+- Directorio raíz: la raíz del repositorio (`.`).
 - Node.js: `22`.
 - Instalación: `npm install`.
 - Build: `npm run build`.
 - Directorio de salida: `dist`.
 - Dominio: `pro.calorfy.com`.
+
+Si se despliega directamente desde el monorepo `gautama001/calorfy`, el
+directorio raíz debe configurarse como `pro-web`.
 
 En Supabase Auth se deben permitir estas Redirect URLs:
 
@@ -37,4 +40,3 @@ En Supabase Auth se deben permitir estas Redirect URLs:
 El dashboard obtiene clientes mediante `get_professional_client_summaries()`.
 La función solo devuelve relaciones activas y pone en `null` cualquier dato de
 salud cuyo permiso no haya sido autorizado explícitamente por el cliente.
-
