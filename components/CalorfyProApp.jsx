@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { createProfessionalInvite, getProfessionalClients, getProfessionalOverview, getProfessionalProfile, professionalInviteUrl, revokeProfessionalInvite, saveProfessionalProfile, } from '../lib/professionals';
+import { createProfessionalInvite, getProfessionalClients, getProfessionalOverview, getProfessionalProfile, professionalInviteUrl, revokeProfessionalInvite, saveProfessionalProfile, subscribeToProfessionalUpdates, } from '../lib/professionals';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import ClientDetailView from './ClientDetailView';
 const countries = [
     ['AR', 'Argentina'], ['BR', 'Brasil'], ['CL', 'Chile'], ['CO', 'Colombia'],
     ['MX', 'México'], ['PE', 'Perú'], ['UY', 'Uruguay'], ['OTHER', 'Otro'],
@@ -26,6 +27,8 @@ function friendlyError(error) {
         return 'Ya tenés 10 invitaciones abiertas. Revocá alguna antes de crear otra.';
     if (message.includes('get_professional_client_summaries'))
         return 'El modelo seguro de clientes todavía no fue aplicado en Supabase.';
+    if (message.includes('get_professional_client_detail') || message.includes('professional_client_sync_state'))
+        return 'Falta aplicar la actualización de datos en vivo del portal profesional.';
     return message || 'Ocurrió un error inesperado.';
 }
 function professionLabel(profession) {
@@ -215,7 +218,7 @@ function InviteModal({ onClose, onCreated }) {
       </section>
     </div>);
 }
-function SummaryView({ clients, invites, onInvite }) {
+function SummaryView({ clients, invites, onInvite, onOpenClient }) {
     const activeInvites = invites.filter((invite) => !invite.acceptedAt && !invite.revokedAt && new Date(invite.expiresAt) > new Date());
     const sharedWeight = clients.filter((client) => client.permissions.weight).length;
     return <>
@@ -227,21 +230,21 @@ function SummaryView({ clients, invites, onInvite }) {
     <div className="summary-grid">
       <section className="panel">
         <div className="panel-heading"><div><h3>Clientes recientes</h3><p>Información habilitada por cada persona</p></div></div>
-        {clients.length ? <div className="client-list">{clients.slice(0, 5).map((client) => <ClientRow client={client} key={client.relationshipId}/>)}</div> : <EmptyClients onInvite={onInvite}/>}
+        {clients.length ? <div className="client-list">{clients.slice(0, 5).map((client) => <ClientRow client={client} key={client.relationshipId} onOpen={onOpenClient}/>)}</div> : <EmptyClients onInvite={onInvite}/>}
       </section>
       <aside className="invite-card"><p className="eyebrow">Nueva conexión</p><h3>Sumá tu primer cliente</h3><p>Creá una invitación privada y dejá que la persona elija qué información compartir.</p><button className="button mint full" onClick={onInvite}>Generar invitación</button><div className="privacy-copy"><span>◆</span><small>La relación profesional por sí sola no habilita datos de salud.</small></div></aside>
     </div>
   </>;
 }
-function ClientRow({ client }) {
+function ClientRow({ client, onOpen }) {
     const permissionCount = Object.values(client.permissions).filter(Boolean).length;
-    return <article className="client-row"><span className="client-avatar">{client.displayName.charAt(0).toUpperCase()}</span><div><b>{client.displayName}</b><small>Desde {new Date(client.startedAt).toLocaleDateString('es-AR')}</small></div><div className="client-metric">{client.currentWeightKg ? <><b>{client.currentWeightKg} kg</b><small>Último peso</small></> : <><b>{permissionCount}/4</b><small>Permisos</small></>}</div><span className="row-arrow">›</span></article>;
+    return <button type="button" className="client-row" onClick={() => onOpen(client)}><span className="client-avatar">{client.displayName.charAt(0).toUpperCase()}</span><span className="client-copy"><b>{client.displayName}</b><small>Desde {new Date(client.startedAt).toLocaleDateString('es-AR')}</small></span><span className="client-metric">{client.currentWeightKg ? <><b>{client.currentWeightKg} kg</b><small>Último peso</small></> : <><b>{permissionCount}/4</b><small>Permisos</small></>}</span><span className="row-arrow">›</span></button>;
 }
 function EmptyClients({ onInvite }) {
     return <div className="empty-state"><span>◎</span><h4>Todavía no hay clientes conectados</h4><p>Creá una invitación segura para vincular a tu primera persona.</p><button className="text-link" onClick={onInvite}>Crear invitación →</button></div>;
 }
-function ClientsView({ clients, onInvite }) {
-    return <section className="panel large-panel"><div className="panel-heading"><div><h3>Clientes</h3><p>Datos visibles según los permisos vigentes</p></div><button className="button secondary" onClick={onInvite}>+ Invitar cliente</button></div>{clients.length ? <div className="client-list expanded">{clients.map((client) => <ClientRow client={client} key={client.relationshipId}/>)}</div> : <EmptyClients onInvite={onInvite}/>}</section>;
+function ClientsView({ clients, onInvite, onOpenClient }) {
+    return <section className="panel large-panel"><div className="panel-heading"><div><h3>Clientes</h3><p>Datos visibles según los permisos vigentes</p></div><button className="button secondary" onClick={onInvite}>+ Invitar cliente</button></div>{clients.length ? <div className="client-list expanded">{clients.map((client) => <ClientRow client={client} key={client.relationshipId} onOpen={onOpenClient}/>)}</div> : <EmptyClients onInvite={onInvite}/>}</section>;
 }
 function InvitationsView({ invites, onRefresh, onInvite }) {
     const [busyId, setBusyId] = useState('');
@@ -279,6 +282,10 @@ function Dashboard({ session, profile, onProfileSaved, initialView }) {
     const [busy, setBusy] = useState(true);
     const [notice, setNotice] = useState('');
     const [inviteOpen, setInviteOpen] = useState(false);
+    const [selectedClient, setSelectedClient] = useState(null);
+    const [revision, setRevision] = useState(0);
+    const [connectionState, setConnectionState] = useState('connecting');
+    const [lastUpdated, setLastUpdated] = useState(null);
     const refresh = useCallback(async () => {
         setNotice('');
         try {
@@ -302,22 +309,44 @@ function Dashboard({ session, profile, onProfileSaved, initialView }) {
         }
         finally {
             setBusy(false);
+            setLastUpdated(new Date());
         }
     }, [session.user.id]);
     useEffect(() => { void refresh(); }, [refresh]);
+    useEffect(() => subscribeToProfessionalUpdates(session.user.id, (event) => {
+        if (event.type === 'connection') {
+            setConnectionState(event.status === 'SUBSCRIBED' ? 'live' : 'connecting');
+            return;
+        }
+        setRevision((value) => value + 1);
+        void refresh();
+    }), [refresh, session.user.id]);
+    useEffect(() => {
+        const requestedClient = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('client');
+        if (requestedClient && clients.length) setSelectedClient(clients.find((client) => client.clientId === requestedClient) ?? null);
+    }, [clients]);
+    function openClient(client) {
+        setSelectedClient(client);
+        setView('clients');
+        router.push(`/dashboard/clients?client=${encodeURIComponent(client.clientId)}`);
+    }
+    function closeClient() {
+        setSelectedClient(null);
+        router.push('/dashboard/clients');
+    }
     const firstName = profile.publicName.split(' ')[0];
     const titles = { summary: 'Resumen', clients: 'Clientes', invitations: 'Invitaciones', settings: 'Ajustes' };
     const nav = useMemo(() => [['summary', '⌂', 'Resumen'], ['clients', '◎', 'Clientes'], ['invitations', '↗', 'Invitaciones'], ['settings', '⚙', 'Ajustes']], []);
     return <div className="dashboard-shell">
-    <aside className="sidebar"><Brand /><nav>{nav.map(([id, icon, label]) => <button key={id} className={view === id ? 'active' : ''} onClick={() => { setView(id); router.push(dashboardPaths[id]); }}><span>{icon}</span><b>{label}</b></button>)}</nav><div className="side-account"><span>{profile.publicName.charAt(0).toUpperCase()}</span><div><b>{profile.publicName}</b><small>{professionLabel(profile.profession)}</small></div><button aria-label="Cerrar sesión" onClick={() => supabase.auth.signOut()}>↪</button></div></aside>
+    <aside className="sidebar"><Brand /><nav>{nav.map(([id, icon, label]) => <button key={id} className={view === id ? 'active' : ''} onClick={() => { setSelectedClient(null); setView(id); router.push(dashboardPaths[id]); }}><span>{icon}</span><b>{label}</b></button>)}</nav><div className="side-account"><span>{profile.publicName.charAt(0).toUpperCase()}</span><div><b>{profile.publicName}</b><small>{professionLabel(profile.profession)}</small></div><button aria-label="Cerrar sesión" onClick={() => supabase.auth.signOut()}>↪</button></div></aside>
     <main className="dashboard-main">
-      <header className="topbar"><Brand compact/><h1>{titles[view]}</h1><div><span className={`verification ${profile.verificationStatus}`}>● {profile.verificationStatus === 'verified' ? 'VERIFICADO' : 'SIN VERIFICAR'}</span><button className="button secondary" onClick={() => setInviteOpen(true)}>+ Invitar cliente</button></div></header>
+      <header className="topbar"><Brand compact/><h1>{selectedClient ? selectedClient.displayName : titles[view]}</h1><div><span className={`sync-indicator ${connectionState}`}><i/> {connectionState === 'live' ? 'EN VIVO' : 'CONECTANDO'}</span><span className={`verification ${profile.verificationStatus}`}>● {profile.verificationStatus === 'verified' ? 'VERIFICADO' : 'SIN VERIFICAR'}</span><button className="button secondary" onClick={() => setInviteOpen(true)}>+ Invitar cliente</button></div></header>
       <div className="dashboard-content">
-        <div className="welcome"><div><p className="eyebrow">Tu espacio de trabajo</p><h2>{view === 'summary' ? `Buenos días, ${firstName}` : titles[view]}</h2><p>{view === 'summary' ? 'Un resumen claro del acompañamiento de tus clientes.' : 'Gestión segura del trabajo profesional.'}</p></div>{view === 'summary' && <button className="button primary" onClick={() => setInviteOpen(true)}>+ Invitar nuevo cliente</button>}</div>
+        {!selectedClient && <div className="welcome"><div><p className="eyebrow">Tu espacio de trabajo</p><h2>{view === 'summary' ? `Buenos días, ${firstName}` : titles[view]}</h2><p>{view === 'summary' ? 'Un resumen claro del acompañamiento de tus clientes.' : 'Gestión segura del trabajo profesional.'}</p>{lastUpdated && <small className="last-updated">Actualizado {lastUpdated.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</small>}</div>{view === 'summary' && <button className="button primary" onClick={() => setInviteOpen(true)}>+ Invitar nuevo cliente</button>}</div>}
         {notice && <div className="notice error dashboard-notice">{notice}</div>}
         {busy ? <div className="content-loader"><span className="loader dark"/>Cargando información…</div> : <>
-          {view === 'summary' && <SummaryView clients={clients} invites={invites} onInvite={() => setInviteOpen(true)}/>}
-          {view === 'clients' && <ClientsView clients={clients} onInvite={() => setInviteOpen(true)}/>}
+          {view === 'summary' && <SummaryView clients={clients} invites={invites} onInvite={() => setInviteOpen(true)} onOpenClient={openClient}/>}
+          {view === 'clients' && (selectedClient ? <ClientDetailView client={selectedClient} revision={revision} onBack={closeClient}/> : <ClientsView clients={clients} onInvite={() => setInviteOpen(true)} onOpenClient={openClient}/>)}
           {view === 'invitations' && <InvitationsView invites={invites} onRefresh={refresh} onInvite={() => setInviteOpen(true)}/>}
           {view === 'settings' && <SettingsView session={session} profile={profile} onSaved={onProfileSaved}/>}
         </>}
