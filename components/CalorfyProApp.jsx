@@ -9,7 +9,13 @@ const countries = [
     ['MX', 'México'], ['PE', 'Perú'], ['UY', 'Uruguay'], ['OTHER', 'Otro'],
 ];
 function friendlyError(error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = error instanceof Error
+        ? error.message
+        : typeof error === 'string'
+            ? error
+            : error && typeof error === 'object'
+                ? [error.message, error.details, error.hint, error.code].filter(Boolean).join(' · ')
+                : '';
     if (message.includes('Invalid login credentials'))
         return 'El correo o la contraseña no son correctos.';
     if (message.includes('Email not confirmed'))
@@ -278,6 +284,11 @@ function Dashboard({ session, profile, onProfileSaved, initialView }) {
         try {
             const overview = await getProfessionalOverview(session.user.id);
             setInvites(overview.invites);
+            const hasActiveClients = overview.relationships.some((relationship) => relationship.status === 'active');
+            if (!hasActiveClients) {
+                setClients([]);
+                return;
+            }
             try {
                 setClients(await getProfessionalClients());
             }
