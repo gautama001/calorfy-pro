@@ -1,7 +1,7 @@
 # Calorfy Pro Web
 
-Dashboard profesional independiente de la aplicación móvil de Calorfy. Usa el
-mismo proyecto de Supabase, pero cuenta con su propio build y despliegue.
+Dashboard profesional construido con Next.js App Router, React y JavaScript.
+Es independiente de la aplicación móvil y usa el mismo proyecto de Supabase.
 
 ## Desarrollo local
 
@@ -12,9 +12,9 @@ mismo proyecto de Supabase, pero cuenta con su propio build y despliegue.
 
 ## Variables de entorno
 
-- `VITE_SUPABASE_URL`: URL pública del proyecto Supabase.
-- `VITE_SUPABASE_PUBLISHABLE_KEY`: clave publicable; nunca usar `service_role`.
-- `VITE_CONSUMER_CONNECT_URL`: URL donde la app del cliente recibe una invitación.
+- `NEXT_PUBLIC_SUPABASE_URL`: URL pública del proyecto Supabase.
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: clave publicable; nunca usar `service_role`.
+- `NEXT_PUBLIC_CONSUMER_CONNECT_URL`: URL donde la app del cliente recibe una invitación.
 
 ## Despliegue en Hostinger
 
@@ -24,7 +24,8 @@ mismo proyecto de Supabase, pero cuenta con su propio build y despliegue.
 - Node.js: `22`.
 - Instalación: `npm install`.
 - Build: `npm run build`.
-- Directorio de salida: `dist`.
+- Inicio: `npm start`.
+- Framework: Next.js.
 - Dominio: `pro.calorfy.com`.
 
 Si se despliega directamente desde el monorepo `gautama001/calorfy`, el
