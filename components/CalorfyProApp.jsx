@@ -218,33 +218,88 @@ function InviteModal({ onClose, onCreated }) {
       </section>
     </div>);
 }
+function daysSince(value) {
+    if (!value)
+        return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime()))
+        return null;
+    return Math.max(0, Math.floor((Date.now() - date.getTime()) / 86400000));
+}
+function clientSignals(client) {
+    const signals = [];
+    const today = new Date().toISOString().slice(0, 10);
+    if (client.attentionStatus === 'needs_attention')
+        signals.push({ id: 'manual', label: 'Marcado para atención', tone: 'danger' });
+    if (client.nextReviewOn && client.nextReviewOn < today)
+        signals.push({ id: 'overdue', label: 'Revisión vencida', tone: 'danger' });
+    const mealDays = daysSince(client.lastMealAt);
+    if (client.permissions.diary && (mealDays === null || mealDays >= 3))
+        signals.push({ id: 'diary', label: mealDays === null ? 'Sin comidas registradas' : `${mealDays} días sin comidas`, tone: 'warning' });
+    const weightDays = daysSince(client.lastWeightOn);
+    if (client.permissions.weight && (weightDays === null || weightDays >= 7))
+        signals.push({ id: 'weight', label: weightDays === null ? 'Sin peso registrado' : `${weightDays} días sin peso`, tone: 'warning' });
+    return signals;
+}
+function portfolioStatus(client) {
+    const signals = clientSignals(client);
+    if (client.attentionStatus === 'needs_attention' || signals.some((signal) => signal.tone === 'danger'))
+        return 'needs_attention';
+    if (client.attentionStatus === 'following' || signals.length)
+        return 'following';
+    return 'up_to_date';
+}
+const portfolioLabels = { needs_attention: 'Requiere atención', following: 'En seguimiento', up_to_date: 'Al día' };
 function SummaryView({ clients, invites, onInvite, onOpenClient }) {
     const activeInvites = invites.filter((invite) => !invite.acceptedAt && !invite.revokedAt && new Date(invite.expiresAt) > new Date());
-    const sharedWeight = clients.filter((client) => client.permissions.weight).length;
+    const attention = clients.filter((client) => portfolioStatus(client) === 'needs_attention');
+    const following = clients.filter((client) => portfolioStatus(client) === 'following');
+    const upToDate = clients.filter((client) => portfolioStatus(client) === 'up_to_date');
+    const nextWeek = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+    const upcoming = clients.filter((client) => client.nextReviewOn && client.nextReviewOn >= new Date().toISOString().slice(0, 10) && client.nextReviewOn <= nextWeek).sort((a, b) => a.nextReviewOn.localeCompare(b.nextReviewOn));
     return <>
     <div className="stats-grid">
-      <article className="stat-card"><header><span>Clientes activos</span><i>◎</i></header><strong>{clients.length}</strong><small>con acceso autorizado</small></article>
-      <article className="stat-card"><header><span>Invitaciones abiertas</span><i>↗</i></header><strong>{activeInvites.length}</strong><small>pendientes de aceptar</small></article>
-      <article className="stat-card"><header><span>Comparten progreso</span><i>⌁</i></header><strong>{sharedWeight}</strong><small>clientes con permiso de peso</small></article>
+      <article className="stat-card attention"><header><span>Atender hoy</span><i>!</i></header><strong>{attention.length}</strong><small>con prioridad visible</small></article>
+      <article className="stat-card"><header><span>En seguimiento</span><i>↗</i></header><strong>{following.length}</strong><small>con una señal pendiente</small></article>
+      <article className="stat-card"><header><span>Clientes al día</span><i>✓</i></header><strong>{upToDate.length}</strong><small>sin señales pendientes</small></article>
+      <article className="stat-card"><header><span>Invitaciones abiertas</span><i>＋</i></header><strong>{activeInvites.length}</strong><small>pendientes de aceptar</small></article>
     </div>
-    <div className="summary-grid">
-      <section className="panel">
-        <div className="panel-heading"><div><h3>Clientes recientes</h3><p>Información habilitada por cada persona</p></div></div>
-        {clients.length ? <div className="client-list">{clients.slice(0, 5).map((client) => <ClientRow client={client} key={client.relationshipId} onOpen={onOpenClient}/>)}</div> : <EmptyClients onInvite={onInvite}/>}
+    <div className="attention-grid">
+      <section className="panel attention-panel">
+        <div className="panel-heading"><div><h3>Atender hoy</h3><p>Prioridades manuales y revisiones vencidas</p></div><span className="queue-count">{attention.length}</span></div>
+        {attention.length ? <div className="client-list">{attention.map((client) => <ClientRow client={client} key={client.relationshipId} onOpen={onOpenClient}/>)}</div> : <div className="portfolio-empty"><span>✓</span><div><b>No hay prioridades urgentes</b><p>Tu cartera no tiene revisiones vencidas ni clientes marcados.</p></div></div>}
       </section>
-      <aside className="invite-card"><p className="eyebrow">Nueva conexión</p><h3>Sumá tu primer cliente</h3><p>Creá una invitación privada y dejá que la persona elija qué información compartir.</p><button className="button mint full" onClick={onInvite}>Generar invitación</button><div className="privacy-copy"><span>◆</span><small>La relación profesional por sí sola no habilita datos de salud.</small></div></aside>
+      <section className="panel review-panel">
+        <div className="panel-heading"><div><h3>Próximas revisiones</h3><p>Programadas para los próximos 7 días</p></div></div>
+        {upcoming.length ? <div className="review-list">{upcoming.map((client) => <button key={client.relationshipId} onClick={() => onOpenClient(client)}><span>{new Date(`${client.nextReviewOn}T12:00:00`).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}</span><div><b>{client.displayName}</b><small>{client.tags.slice(0, 2).join(' · ') || 'Sin etiquetas'}</small></div><i>›</i></button>)}</div> : <div className="portfolio-empty compact"><span>○</span><div><b>Semana disponible</b><p>No hay revisiones agendadas.</p></div></div>}
+        {!clients.length && <button className="button mint full" onClick={onInvite}>Invitar primer cliente</button>}
+      </section>
     </div>
   </>;
 }
 function ClientRow({ client, onOpen }) {
     const permissionCount = Object.values(client.permissions).filter(Boolean).length;
-    return <button type="button" className="client-row" onClick={() => onOpen(client)}><span className="client-avatar">{client.displayName.charAt(0).toUpperCase()}</span><span className="client-copy"><b>{client.displayName}</b><small>Desde {new Date(client.startedAt).toLocaleDateString('es-AR')}</small></span><span className="client-metric">{client.currentWeightKg ? <><b>{client.currentWeightKg} kg</b><small>Último peso</small></> : <><b>{permissionCount}/4</b><small>Permisos</small></>}</span><span className="row-arrow">›</span></button>;
+    const status = portfolioStatus(client);
+    const signals = clientSignals(client);
+    return <button type="button" className="client-row" onClick={() => onOpen(client)}><span className="client-avatar">{client.displayName.charAt(0).toUpperCase()}</span><span className="client-copy"><b>{client.displayName}</b><small>{signals[0]?.label ?? (client.lastSyncAt ? `Sincronizado ${new Date(client.lastSyncAt).toLocaleDateString('es-AR')}` : `Desde ${new Date(client.startedAt).toLocaleDateString('es-AR')}`)}</small>{client.tags?.length ? <span className="mini-tags">{client.tags.slice(0, 2).map((tag) => <em key={tag}>{tag}</em>)}</span> : null}</span><span className={`portfolio-pill ${status}`}>{portfolioLabels[status]}</span><span className="client-metric">{client.currentWeightKg ? <><b>{client.currentWeightKg} kg</b><small>Último peso</small></> : <><b>{permissionCount}/4</b><small>Permisos</small></>}</span><span className="row-arrow">›</span></button>;
 }
 function EmptyClients({ onInvite }) {
     return <div className="empty-state"><span>◎</span><h4>Todavía no hay clientes conectados</h4><p>Creá una invitación segura para vincular a tu primera persona.</p><button className="text-link" onClick={onInvite}>Crear invitación →</button></div>;
 }
 function ClientsView({ clients, onInvite, onOpenClient }) {
-    return <section className="panel large-panel"><div className="panel-heading"><div><h3>Clientes</h3><p>Datos visibles según los permisos vigentes</p></div><button className="button secondary" onClick={onInvite}>+ Invitar cliente</button></div>{clients.length ? <div className="client-list expanded">{clients.map((client) => <ClientRow client={client} key={client.relationshipId} onOpen={onOpenClient}/>)}</div> : <EmptyClients onInvite={onInvite}/>}</section>;
+    const [query, setQuery] = useState('');
+    const [filter, setFilter] = useState('all');
+    const normalizedQuery = query.trim().toLocaleLowerCase('es');
+    const visibleClients = clients.filter((client) => {
+        const matchesQuery = !normalizedQuery || `${client.displayName} ${(client.tags ?? []).join(' ')}`.toLocaleLowerCase('es').includes(normalizedQuery);
+        const status = portfolioStatus(client);
+        return matchesQuery && (filter === 'all' || filter === status);
+    }).sort((a, b) => {
+        const rank = { needs_attention: 0, following: 1, up_to_date: 2 };
+        return rank[portfolioStatus(a)] - rank[portfolioStatus(b)] || a.displayName.localeCompare(b.displayName, 'es');
+    });
+    const filters = [['all', 'Todos'], ['needs_attention', 'Requieren atención'], ['following', 'En seguimiento'], ['up_to_date', 'Al día']];
+    return <section className="panel large-panel"><div className="panel-heading"><div><h3>Clientes</h3><p>Ordenados por prioridad y datos visibles</p></div><button className="button secondary" onClick={onInvite}>+ Invitar cliente</button></div>{clients.length ? <><div className="client-toolbar"><label><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nombre o etiqueta"/></label><div className="portfolio-filters">{filters.map(([value, label]) => <button type="button" className={filter === value ? 'active' : ''} onClick={() => setFilter(value)} key={value}>{label}</button>)}</div></div><div className="client-list expanded">{visibleClients.length ? visibleClients.map((client) => <ClientRow client={client} key={client.relationshipId} onOpen={onOpenClient}/>) : <div className="portfolio-empty"><span>⌕</span><div><b>Sin resultados</b><p>Probá otro nombre, etiqueta o estado.</p></div></div>}</div></> : <EmptyClients onInvite={onInvite}/>}</section>;
 }
 function InvitationsView({ invites, onRefresh, onInvite }) {
     const [busyId, setBusyId] = useState('');
@@ -333,6 +388,7 @@ function Dashboard({ session, profile, onProfileSaved, initialView }) {
     function closeClient() {
         setSelectedClient(null);
         router.push('/dashboard/clients');
+        void refresh();
     }
     const firstName = profile.publicName.split(' ')[0];
     const titles = { summary: 'Resumen', clients: 'Clientes', invitations: 'Invitaciones', settings: 'Ajustes' };
