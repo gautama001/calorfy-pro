@@ -1,4 +1,5 @@
 import './globals.css';
+import { I18nProvider } from '../components/I18nProvider';
 
 export const metadata = {
   title: 'Calorfy Pro — Portal profesional',
@@ -14,8 +15,8 @@ export const viewport = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="es">
-      <body>{children}</body>
+    <html lang="es" suppressHydrationWarning>
+      <body><I18nProvider>{children}</I18nProvider></body>
     </html>
   );
 }

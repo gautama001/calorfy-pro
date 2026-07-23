@@ -3,19 +3,21 @@
 import { useEffect, useState } from 'react';
 import { acceptProfessionalInvite, previewProfessionalInvite } from '../lib/professionals';
 import { supabase } from '../lib/supabase';
+import { useI18n } from './I18nProvider';
+import LanguageSwitcher from './LanguageSwitcher';
 
 const initialPermissions = { diary: false, weight: false, goals: false, photos: false };
 
-function readableError(reason) {
+function readableError(reason, t) {
   const message = reason instanceof Error
     ? reason.message
     : reason && typeof reason === 'object'
       ? [reason.message, reason.details, reason.hint].filter(Boolean).join(' · ')
       : String(reason ?? '');
-  if (message.includes('Invitation is invalid or expired')) return 'La invitación venció, fue utilizada o ya no está disponible.';
-  if (message.includes('A professional cannot invite their own account')) return 'Abriste la invitación con la cuenta profesional. Cerrá sesión e ingresá con tu cuenta personal de Calorfy.';
-  if (message.includes('Invalid login credentials')) return 'El correo o la contraseña no son correctos.';
-  return message || 'No pudimos completar la conexión.';
+  if (message.includes('Invitation is invalid or expired')) return t('invitation_expired');
+  if (message.includes('A professional cannot invite their own account')) return t('professional_own_account');
+  if (message.includes('Invalid login credentials')) return t('invalid_credentials');
+  return message || t('connection_error');
 }
 
 function Brand() {
@@ -23,6 +25,7 @@ function Brand() {
 }
 
 export default function ConsumerConnect({ token }) {
+  const { t } = useI18n();
   const [session, setSession] = useState(null);
   const [preview, setPreview] = useState(null);
   const [permissions, setPermissions] = useState(initialPermissions);
@@ -44,7 +47,7 @@ export default function ConsumerConnect({ token }) {
       setPreview(nextPreview);
       setStage('consent');
     } catch (reason) {
-      setNotice(readableError(reason));
+      setNotice(readableError(reason, t));
       setStage('error');
     }
   }
@@ -66,7 +69,7 @@ export default function ConsumerConnect({ token }) {
       if (error) throw error;
       await loadInvite(data.session);
     } catch (reason) {
-      setNotice(readableError(reason));
+      setNotice(readableError(reason, t));
     } finally {
       setBusy(false);
     }
@@ -79,7 +82,7 @@ export default function ConsumerConnect({ token }) {
       await acceptProfessionalInvite(token, permissions);
       setStage('success');
     } catch (reason) {
-      setNotice(readableError(reason));
+      setNotice(readableError(reason, t));
     } finally {
       setBusy(false);
     }
@@ -94,59 +97,59 @@ export default function ConsumerConnect({ token }) {
   }
 
   return <main className="connect-page">
-    <header><Brand/><span>Conexión profesional segura</span></header>
+    <header><Brand/><span>{t('secure_connection')}</span><LanguageSwitcher compact/></header>
     <section className="connect-card">
-      {stage === 'loading' && <div className="connect-loading"><span className="loader dark"/><p>Validando invitación…</p></div>}
+      {stage === 'loading' && <div className="connect-loading"><span className="loader dark"/><p>{t('validating_invitation')}</p></div>}
 
       {stage === 'auth' && <>
-        <p className="eyebrow">Invitación privada</p>
-        <h1>Ingresá con tu cuenta personal</h1>
-        <p className="connect-lead">Usá la misma cuenta que utilizás en Calorfy. La cuenta profesional que generó el enlace no puede aceptarlo.</p>
+        <p className="eyebrow">{t('private_invitation')}</p>
+        <h1>{t('personal_account_login')}</h1>
+        <p className="connect-lead">{t('personal_account_intro')}</p>
         {notice && <div className="notice error">{notice}</div>}
         <form className="form-grid" onSubmit={login}>
-          <label>Correo electrónico<input name="email" required type="email" autoComplete="email"/></label>
-          <label>Contraseña<input name="password" required type="password" autoComplete="current-password"/></label>
-          <button className="button primary full" disabled={busy}>{busy ? 'Ingresando…' : 'Continuar'}</button>
+          <label>{t('email')}<input name="email" required type="email" autoComplete="email"/></label>
+          <label>{t('password')}<input name="password" required type="password" autoComplete="current-password"/></label>
+          <button className="button primary full" disabled={busy}>{busy ? t('signing_in') : t('continue')}</button>
         </form>
       </>}
 
       {stage === 'consent' && preview && <>
-        <p className="eyebrow">Elegís qué compartir</p>
-        <h1>{preview.professionalName} quiere acompañarte</h1>
+        <p className="eyebrow">{t('choose_sharing')}</p>
+        <h1>{t('wants_to_support', { name: preview.professionalName })}</h1>
         <div className="professional-preview">
           <span>{preview.professionalName.charAt(0).toUpperCase()}</span>
-          <div><b>{preview.professionalName}</b><small>{preview.profession === 'nutritionist' ? 'Nutricionista' : 'Entrenador/a personal'}{preview.organizationName ? ` · ${preview.organizationName}` : ''}</small></div>
-          <i>{preview.verificationStatus === 'verified' ? 'Verificado' : 'Sin verificar'}</i>
+          <div><b>{preview.professionalName}</b><small>{preview.profession === 'nutritionist' ? t('nutritionist') : t('personal_trainer')}{preview.organizationName ? ` · ${preview.organizationName}` : ''}</small></div>
+          <i>{preview.verificationStatus === 'verified' ? t('verified') : t('unverified')}</i>
         </div>
-        <p className="connect-lead">Podés modificar o revocar estos permisos más adelante desde Calorfy.</p>
+        <p className="connect-lead">{t('permission_control_intro')}</p>
         <div className="permission-list">
           {[
-            ['diary', 'Diario de comidas', 'Comidas, cantidades y nutrientes registrados.'],
-            ['weight', 'Progreso de peso', 'Pesos guardados y evolución en el tiempo.'],
-            ['goals', 'Objetivos', 'Meta de peso y objetivo calórico actual.'],
-            ['photos', 'Fotos', 'Imágenes que decidas conservar en el diario.'],
+            ['diary', t('food_diary'), t('food_diary_description')],
+            ['weight', t('weight_progress'), t('weight_progress_description')],
+            ['goals', t('goals'), t('goals_permission_description')],
+            ['photos', t('photos'), t('photos_permission_description')],
           ].map(([key, title, description]) => <label key={key}>
             <span><b>{title}</b><small>{description}</small></span>
             <input type="checkbox" checked={permissions[key]} onChange={(event) => setPermissions((current) => ({ ...current, [key]: event.target.checked }))}/>
           </label>)}
         </div>
         {notice && <div className="notice error">{notice}</div>}
-        <button className="button primary full" onClick={connect} disabled={busy}>{busy ? 'Conectando…' : 'Aceptar y conectar'}</button>
-        <button className="text-button connect-account" onClick={changeAccount}>No soy {session?.user.email} · cambiar cuenta</button>
+        <button className="button primary full" onClick={connect} disabled={busy}>{busy ? t('connecting_account') : t('accept_connect')}</button>
+        <button className="text-button connect-account" onClick={changeAccount}>{t('not_this_account', { email: session?.user.email })}</button>
       </>}
 
       {stage === 'success' && <div className="connect-success">
-        <span>✓</span><p className="eyebrow">Conexión completada</p><h1>Ya estás conectado</h1>
-        <p>El profesional solamente podrá consultar los datos que autorizaste. Ya podés volver a Calorfy.</p>
-        <a className="button primary full" href="https://calorfy.com">Volver a Calorfy</a>
+        <span>✓</span><p className="eyebrow">{t('connection_completed')}</p><h1>{t('now_connected')}</h1>
+        <p>{t('connection_success_body')}</p>
+        <a className="button primary full" href="https://calorfy.com">{t('return_calorfy')}</a>
       </div>}
 
       {stage === 'error' && <div className="connect-success error-state">
-        <span>!</span><p className="eyebrow">No disponible</p><h1>No pudimos abrir la invitación</h1>
+        <span>!</span><p className="eyebrow">{t('unavailable')}</p><h1>{t('invitation_open_error')}</h1>
         <div className="notice error">{notice}</div>
-        {session && <button className="button secondary full" onClick={changeAccount}>Cambiar cuenta</button>}
+        {session && <button className="button secondary full" onClick={changeAccount}>{t('change_account')}</button>}
       </div>}
     </section>
-    <footer>La relación no concede acceso automático. Vos controlás cada permiso.</footer>
+    <footer>{t('permission_footer')}</footer>
   </main>;
 }

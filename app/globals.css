@@ -35,6 +35,14 @@ h1, h2, h3, h4 { font-family: 'Manrope', sans-serif; letter-spacing: -.035em; }
 .brand-mark::before, .brand-mark::after { content: ''; position: absolute; width: 7px; border-radius: 9px; background: var(--deep); }
 .brand-mark::before { height: 17px; left: 8px; top: 7px; }
 .brand-mark::after { height: 11px; right: 7px; bottom: 6px; }
+.language-switcher { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid var(--line); border-radius: 11px; background: rgba(255,255,255,.82); }
+.language-switcher button { width: 34px; height: 30px; padding: 0; border: 0; border-radius: 8px; color: var(--muted); background: transparent; font: 800 10px/1 'Manrope', sans-serif; cursor: pointer; }
+.language-switcher button:hover { color: var(--green); background: #eef8f5; }
+.language-switcher button.active { color: var(--deep); background: var(--mint-light); }
+.language-switcher.dark { border-color: rgba(255,255,255,.16); background: rgba(255,255,255,.06); }
+.language-switcher.dark button { color: rgba(255,255,255,.62); }
+.language-switcher.dark button.active { color: var(--deep); background: var(--mint); }
+.auth-brand-row { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; }
 .eyebrow { margin: 0 0 12px; color: #008b68; font: 800 11px/1 'Manrope', sans-serif; letter-spacing: .14em; text-transform: uppercase; }
 .button { display: inline-flex; min-height: 48px; padding: 0 18px; align-items: center; justify-content: center; gap: 8px; border: 1px solid transparent; border-radius: 13px; color: var(--ink); background: transparent; font-weight: 800; transition: transform .18s ease, filter .18s ease; }
 .button:hover { transform: translateY(-1px); filter: brightness(1.025); }
@@ -376,6 +384,7 @@ h1, h2, h3, h4 { font-family: 'Manrope', sans-serif; letter-spacing: -.035em; }
 }
 
 @media (max-width: 700px) {
+  .topbar .language-switcher { position: fixed; right: 14px; bottom: 18px; z-index: 60; box-shadow: 0 10px 30px rgba(2,35,27,.18); }
   .field-row { grid-template-columns: 1fr; }
   .story-points { grid-template-columns: 1fr; }
   .story-points article { min-height: auto; }
